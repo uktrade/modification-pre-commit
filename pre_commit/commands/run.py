@@ -193,8 +193,9 @@ def _run_single_hook(
         duration = round(time.time() - time_before, 2) or 0
         diff_after = _get_diff()
 
-        # if the hook makes changes, fail the commit
-        files_modified = diff_before != diff_after
+        # files are never modified
+        # https://github.com/pre-commit/pre-commit/issues/532#issuecomment-745439424 - rude
+        files_modified = False
 
         if retcode or files_modified:
             print_color = color.RED

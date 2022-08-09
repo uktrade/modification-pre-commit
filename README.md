@@ -5,7 +5,7 @@
 ## pre-commit
 
 Forked from https://github.com/pre-commit/pre-commit - this allows for files to be modified by pre-commit hooks without 
-returning a non-zer exit code, meaning that black and fitness-functions can be ran within the pre-commit process and 
+returning a non-zero exit code, meaning that black and fitness-functions can be ran within the pre-commit process and 
 two commits are not necessary.
 
 A framework for managing and maintaining multi-language pre-commit hooks.

@@ -334,7 +334,7 @@ def run(
     stash = not args.all_files and not args.files
 
     # Check if we have unresolved merge conflict files and fail fast.
-    if _has_unmerged_paths():
+    if stash and _has_unmerged_paths():
         logger.error('Unmerged files.  Resolve before committing.')
         return 1
     if bool(args.from_ref) != bool(args.to_ref):
@@ -421,7 +421,11 @@ def run(
             return 1
 
         skips = _get_skips(environ)
-        to_install = [hook for hook in hooks if hook.id not in skips]
+        to_install = [
+            hook
+            for hook in hooks
+            if hook.id not in skips and hook.alias not in skips
+        ]
         install_hook_envs(to_install, store)
 
         return _run_hooks(config, hooks, skips, args)

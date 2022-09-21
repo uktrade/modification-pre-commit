@@ -536,6 +536,13 @@ def test_merge_conflict(cap_out, store, in_merge_conflict):
     assert b'Unmerged files.  Resolve before committing.' in printed
 
 
+def test_files_during_merge_conflict(cap_out, store, in_merge_conflict):
+    opts = run_opts(files=['placeholder'])
+    ret, printed = _do_run(cap_out, store, in_merge_conflict, opts)
+    assert ret == 0
+    assert b'Bash hook' in printed
+
+
 def test_merge_conflict_modified(cap_out, store, in_merge_conflict):
     # Touch another file so we have unstaged non-conflicting things
     assert os.path.exists('placeholder')
@@ -631,6 +638,32 @@ def test_skip_bypasses_installation(cap_out, store, repo_with_passing_hook):
         cap_out, store, repo_with_passing_hook,
         run_opts(all_files=True),
         {'SKIP': 'skipme'},
+    )
+    assert ret == 0
+
+
+def test_skip_alias_bypasses_installation(
+        cap_out, store, repo_with_passing_hook,
+):
+    config = {
+        'repo': 'local',
+        'hooks': [
+            {
+                'id': 'skipme',
+                'name': 'skipme-1',
+                'alias': 'skipme-1',
+                'entry': 'skipme',
+                'language': 'python',
+                'additional_dependencies': ['/pre-commit-does-not-exist'],
+            },
+        ],
+    }
+    add_config_to_repo(repo_with_passing_hook, config)
+
+    ret, printed = _do_run(
+        cap_out, store, repo_with_passing_hook,
+        run_opts(all_files=True),
+        {'SKIP': 'skipme-1'},
     )
     assert ret == 0
 

@@ -354,13 +354,13 @@ def test_show_diff_on_failure(
         ({'hook': 'bash_hook'}, (b'Bash hook', b'Passed'), 0, True),
         (
             {'hook': 'nope'},
-            (b'No hook with id `nope` in stage `commit`',),
+            (b'No hook with id `nope` in stage `pre-commit`',),
             1,
             True,
         ),
         (
-            {'hook': 'nope', 'hook_stage': 'push'},
-            (b'No hook with id `nope` in stage `push`',),
+            {'hook': 'nope', 'hook_stage': 'pre-push'},
+            (b'No hook with id `nope` in stage `pre-push`',),
             1,
             True,
         ),
@@ -563,6 +563,16 @@ def test_merge_conflict_resolved(cap_out, store, in_merge_conflict):
         assert msg in printed
 
 
+def test_rebase(cap_out, store, repo_with_passing_hook):
+    args = run_opts(pre_rebase_upstream='master', pre_rebase_branch='topic')
+    environ: MutableMapping[str, str] = {}
+    ret, printed = _do_run(
+        cap_out, store, repo_with_passing_hook, args, environ,
+    )
+    assert environ['PRE_COMMIT_PRE_REBASE_UPSTREAM'] == 'master'
+    assert environ['PRE_COMMIT_PRE_REBASE_BRANCH'] == 'topic'
+
+
 @pytest.mark.parametrize(
     ('hooks', 'expected'),
     (
@@ -718,7 +728,7 @@ def test_non_ascii_hook_id(repo_with_passing_hook, tempdir_factory):
     with cwd(repo_with_passing_hook):
         _, stdout, _ = cmd_output_mocked_pre_commit_home(
             sys.executable, '-m', 'pre_commit.main', 'run', '☃',
-            retcode=None, tempdir_factory=tempdir_factory,
+            check=False, tempdir_factory=tempdir_factory,
         )
         assert 'UnicodeDecodeError' not in stdout
         # Doesn't actually happen, but a reasonable assertion
@@ -737,7 +747,7 @@ def test_stdout_write_bug_py26(repo_with_failing_hook, store, tempdir_factory):
         _, out = git_commit(
             fn=cmd_output_mocked_pre_commit_home,
             tempdir_factory=tempdir_factory,
-            retcode=None,
+            check=False,
         )
         assert 'UnicodeEncodeError' not in out
         # Doesn't actually happen, but a reasonable assertion
@@ -766,6 +776,47 @@ def test_lots_of_files(store, tempdir_factory):
         )
 
 
+def test_no_textconv(cap_out, store, repo_with_passing_hook):
+    # git textconv filters can hide changes from hooks
+    with open('.gitattributes', 'w') as fp:
+        fp.write('*.jpeg diff=empty\n')
+
+    with open('.git/config', 'a') as fp:
+        fp.write('[diff "empty"]\n')
+        fp.write('textconv = "true"\n')
+
+    config = {
+        'repo': 'local',
+        'hooks': [
+            {
+                'id': 'extend-jpeg',
+                'name': 'extend-jpeg',
+                'language': 'system',
+                'entry': (
+                    f'{shlex.quote(sys.executable)} -c "import sys; '
+                    'open(sys.argv[1], \'ab\').write(b\'\\x00\')"'
+                ),
+                'types': ['jpeg'],
+            },
+        ],
+    }
+    add_config_to_repo(repo_with_passing_hook, config)
+
+    stage_a_file('example.jpeg')
+
+    _test_run(
+        cap_out,
+        store,
+        repo_with_passing_hook,
+        {},
+        (
+            b'Failed',
+        ),
+        expected_ret=1,
+        stage=False,
+    )
+
+
 def test_stages(cap_out, store, repo_with_passing_hook):
     config = {
         'repo': 'local',
@@ -777,7 +828,7 @@ def test_stages(cap_out, store, repo_with_passing_hook):
                 'language': 'pygrep',
                 'stages': [stage],
             }
-            for i, stage in enumerate(('commit', 'push', 'manual'), 1)
+            for i, stage in enumerate(('pre-commit', 'pre-push', 'manual'), 1)
         ],
     }
     add_config_to_repo(repo_with_passing_hook, config)
@@ -792,8 +843,8 @@ def test_stages(cap_out, store, repo_with_passing_hook):
         assert printed.count(b'hook ') == 1
         return printed
 
-    assert _run_for_stage('commit').startswith(b'hook 1...')
-    assert _run_for_stage('push').startswith(b'hook 2...')
+    assert _run_for_stage('pre-commit').startswith(b'hook 1...')
+    assert _run_for_stage('pre-push').startswith(b'hook 2...')
     assert _run_for_stage('manual').startswith(b'hook 3...')
 
 
@@ -1132,7 +1183,7 @@ def test_args_hook_only(cap_out, store, repo_with_passing_hook):
                 ),
                 'language': 'system',
                 'files': r'\.py$',
-                'stages': ['commit'],
+                'stages': ['pre-commit'],
             },
             {
                 'id': 'do_not_commit',
